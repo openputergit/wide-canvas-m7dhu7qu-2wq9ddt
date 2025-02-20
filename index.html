@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Placement Portal</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .loader {
+            border-top-color: #3498db;
+            animation: spinner 1.5s linear infinite;
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="app">
+        <!-- Navigation -->
+        <nav class="bg-white shadow-lg">
+            <div class="max-w-7xl mx-auto px-4">
+                <div class="flex justify-between h-16">
+                    <div class="flex items-center">
+                        <span class="text-xl font-bold text-blue-600">PlacementPortal</span>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <template v-if="!currentUser">
+                            <button @click="activeModal = 'login'" class="px-4 py-2 text-blue-600 hover:text-blue-800">Login</button>
+                            <button @click="activeModal = 'register'" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Register</button>
+                        </template>
+                        <template v-else>
+                            <button @click="logout" class="px-4 py-2 text-red-600 hover:text-red-800">Logout</button>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 py-8">
+            <!-- Dashboard for logged in users -->
+            <template v-if="currentUser">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Student Section -->
+                    <div v-if="currentUser.role === 'student'" class="space-y-6">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h2 class="text-xl font-semibold mb-4">Profile</h2>
+                            <div class="space-y-4">
+                                <input v-model="profile.name" class="w-full p-2 border rounded" placeholder="Full Name">
+                                <input v-model="profile.education" class="w-full p-2 border rounded" placeholder="Education">
+                                <input type="file" @change="handleResumeUpload" class="w-full p-2 border rounded">
+                                <button @click="saveProfile" class="w-full bg-blue-600 text-white py-2 rounded-lg">Save Profile</button>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h2 class="text-xl font-semibold mb-4">Available Jobs</h2>
+                            <div v-if="loading" class="flex justify-center">
+                                <div class="loader w-8 h-8 border-4 rounded-full"></div>
+                            </div>
+                            <div v-else class="space-y-4">
+                                <div v-for="job in jobs" :key="job.id" class="border p-4 rounded">
+                                    <h3 class="font-semibold">{{job.title}}</h3>
+                                    <p class="text-gray-600">{{job.company}}</p>
+                                    <button @click="applyForJob(job.id)" class="mt-2 px-4 py-1 bg-green-500 text-white rounded">Apply</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Company Section -->
+                    <div v-if="currentUser.role === 'company'" class="space-y-6">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h2 class="text-xl font-semibold mb-4">Post New Job</h2>
+                            <div class="space-y-4">
+                                <input v-model="newJob.title" class="w-full p-2 border rounded" placeholder="Job Title">
+                                <textarea v-model="newJob.description" class="w-full p-2 border rounded" placeholder="Job Description"></textarea>
+                                <button @click="postJob" class="w-full bg-blue-600 text-white py-2 rounded-lg">Post Job</button>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h2 class="text-xl font-semibold mb-4">Applications</h2>
+                            <div v-if="loading" class="flex justify-center">
+                                <div class="loader w-8 h-8 border-4 rounded-full"></div>
+                            </div>
+                            <div v-else class="space-y-4">
+                                <div v-for="application in applications" :key="application.id" class="border p-4 rounded">
+                                    <h3 class="font-semibold">{{application.student_name}}</h3>
+                                    <p class="text-gray-600">Applied for: {{application.job_title}}</p>
+                                    <div class="flex space-x-2 mt-2">
+                                        <button @click="updateApplication(application.id, 'shortlisted')" class="px-4 py-1 bg-yellow-500 text-white rounded">Shortlist</button>
+                                        <button @click="updateApplication(application.id, 'selected')" class="px-4 py-1 bg-green-500 text-white rounded">Select</button>
+                                        <button @click="updateApplication(application.id, 'rejected')" class="px-4 py-1 bg-red-500 text-white rounded">Reject</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Admin Section -->
+                    <div v-if="currentUser.role === 'admin'" class="space-y-6">
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <h2 class="text-xl font-semibold mb-4">Dashboard Overview</h2>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-blue-100 p-4 rounded">
+                                    <p class="text-lg font-semibold">{{stats.totalStudents}}</p>
+                                    <p class="text-sm text-gray-600">Total Students</p>
+                                </div>
+                                <div class="bg-green-100 p-4 rounded">
+                                    <p class="text-lg font-semibold">{{stats.totalCompanies}}</p>
+                                    <p class="text-sm text-gray-600">Total Companies</p>
+                                </div>
+                                <div class="bg-yellow-100 p-4 rounded">
+                                    <p class="text-lg font-semibold">{{stats.activeJobs}}</p>
+                                    <p class="text-sm text-gray-600">Active Jobs</p>
+                                </div>
+                                <div class="bg-purple-100 p-4 rounded">
+                                    <p class="text-lg font-semibold">{{stats.totalPlacements}}</p>
+                                    <p class="text-sm text-gray-600">Total Placements</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Welcome Screen for non-logged in users -->
+            <template v-else>
+                <div class="text-center py-16">
+                    <h1 class="text-4xl font-bold text-gray-900 mb-4">Welcome to PlacementPortal</h1>
+                    <p class="text-xl text-gray-600 mb-8">Connecting students with their dream careers</p>
+                    <div class="flex justify-center space-x-4">
+                        <button @click="activeModal = 'login'" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Get Started</button>
+                    </div>
+                </div>
+            </template>
+        </main>
+
+        <!-- Modals -->
+        <!-- Login Modal -->
+        <div v-if="activeModal === 'login'" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
+            <div class="bg-white p-8 rounded-lg max-w-md w-full">
+                <h2 class="text-2xl font-bold mb-4">Login</h2>
+                <div class="space-y-4">
+                    <input v-model="loginForm.email" type="email" class="w-full p-2 border rounded" placeholder="Email">
+                    <input v-model="loginForm.password" type="password" class="w-full p-2 border rounded" placeholder="Password">
+                    <select v-model="loginForm.role" class="w-full p-2 border rounded">
+                        <option value="student">Student</option>
+                        <option value="company">Company</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <button @click="login" class="w-full bg-blue-600 text-white py-2 rounded-lg">Login</button>
+                    <button @click="activeModal = null" class="w-full bg-gray-200 text-gray-800 py-2 rounded-lg mt-2">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Register Modal -->
+        <div v-if="activeModal === 'register'" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
+            <div class="bg-white p-8 rounded-lg max-w-md w-full">
+                <h2 class="text-2xl font-bold mb-4">Register</h2>
+                <div class="space-y-4">
+                    <input v-model="registerForm.name" type="text" class="w-full p-2 border rounded" placeholder="Full Name">
+                    <input v-model="registerForm.email" type="email" class="w-full p-2 border rounded" placeholder="Email">
+                    <input v-model="registerForm.password" type="password" class="w-full p-2 border rounded" placeholder="Password">
+                    <select v-model="registerForm.role" class="w-full p-2 border rounded">
+                        <option value="student">Student</option>
+                        <option value="company">Company</option>
+                    </select>
+                    <button @click="register" class="w-full bg-blue-600 text-white py-2 rounded-lg">Register</button>
+                    <button @click="activeModal = null" class="w-full bg-gray-200 text-gray-800 py-2 rounded-lg mt-2">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    currentUser: null,
+                    activeModal: null,
+                    loading: false,
+                    loginForm: {
+                        email: '',
+                        password: '',
+                        role: 'student'
+                    },
+                    registerForm: {
+                        name: '',
+                        email: '',
+                        password: '',
+                        role: 'student'
+                    },
+                    profile: {
+                        name: '',
+                        education: '',
+                        resume: null
+                    },
+                    newJob: {
+                        title: '',
+                        description: ''
+                    },
+                    jobs: [],
+                    applications: [],
+                    stats: {
+                        totalStudents: 0,
+                        totalCompanies: 0,
+                        activeJobs: 0,
+                        totalPlacements: 0
+                    }
+                }
+            },
+            mounted() {
+                // Check for stored user
+                const storedUser = localStorage.getItem('currentUser')
+                if (storedUser) {
+                    this.currentUser = JSON.parse(storedUser)
+                    this.loadDashboardData()
+                }
+            },
+            methods: {
+                async login() {
+                    this.loading = true
+                    try {
+                        // Simulate login - In real app, this would be an API call
+                        this.currentUser = {
+                            id: 'user_' + Date.now(),
+                            name: this.loginForm.email.split('@')[0],
+                            email: this.loginForm.email,
+                            role: this.loginForm.role
+                        }
+                        localStorage.setItem('currentUser', JSON.stringify(this.currentUser))
+                        this.activeModal = null
+                        this.loadDashboardData()
+                    } catch (error) {
+                        console.error('Login failed:', error)
+                        alert('Login failed. Please try again.')
+                    }
+                    this.loading = false
+                },
+                async register() {
+                    this.loading = true
+                    try {
+                        // Simulate registration - In real app, this would be an API call
+                        this.currentUser = {
+                            id: 'user_' + Date.now(),
+                            name: this.registerForm.name,
+                            email: this.registerForm.email,
+                            role: this.registerForm.role
+                        }
+                        localStorage.setItem('currentUser', JSON.stringify(this.currentUser))
+                        this.activeModal = null
+                        this.loadDashboardData()
+                    } catch (error) {
+                        console.error('Registration failed:', error)
+                        alert('Registration failed. Please try again.')
+                    }
+                    this.loading = false
+                },
+                logout() {
+                    this.currentUser = null
+                    localStorage.removeItem('currentUser')
+                },
+                async loadDashboardData() {
+                    this.loading = true
+                    try {
+                        if (this.currentUser.role === 'student') {
+                            // Load available jobs
+                            this.jobs = [
+                                { id: 1, title: 'Software Developer', company: 'Tech Corp' },
+                                { id: 2, title: 'Data Analyst', company: 'Data Solutions' },
+                                { id: 3, title: 'Product Manager', company: 'Product Inc' }
+                            ]
+                        } else if (this.currentUser.role === 'company') {
+                            // Load applications
+                            this.applications = [
+                                { id: 1, student_name: 'John Doe', job_title: 'Software Developer' },
+                                { id: 2, student_name: 'Jane Smith', job_title: 'Data Analyst' }
+                            ]
+                        } else if (this.currentUser.role === 'admin') {
+                            // Load stats
+                            this.stats = {
+                                totalStudents: 150,
+                                totalCompanies: 25,
+                                activeJobs: 45,
+                                totalPlacements: 75
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to load dashboard data:', error)
+                    }
+                    this.loading = false
+                },
+                async handleResumeUpload(event) {
+                    const file = event.target.files[0]
+                    if (file) {
+                        this.profile.resume = file
+                    }
+                },
+                async saveProfile() {
+                    this.loading = true
+                    try {
+                        // Simulate profile save - In real app, this would be an API call
+                        alert('Profile saved successfully!')
+                    } catch (error) {
+                        console.error('Failed to save profile:', error)
+                        alert('Failed to save profile. Please try again.')
+                    }
+                    this.loading = false
+                },
+                async postJob() {
+                    this.loading = true
+                    try {
+                        // Simulate job posting - In real app, this would be an API call
+                        alert('Job posted successfully!')
+                        this.newJob.title = ''
+                        this.newJob.description = ''
+                    } catch (error) {
+                        console.error('Failed to post job:', error)
+                        alert('Failed to post job. Please try again.')
+                    }
+                    this.loading = false
+                },
+                async applyForJob(jobId) {
+                    this.loading = true
+                    try {
+                        // Simulate job application - In real app, this would be an API call
+                        alert('Application submitted successfully!')
+                    } catch (error) {
+                        console.error('Failed to apply for job:', error)
+                        alert('Failed to apply for job. Please try again.')
+                    }
+                    this.loading = false
+                },
+                async updateApplication(applicationId, status) {
+                    this.loading = true
+                    try {
+                        // Simulate application update - In real app, this would be an API call
+                        alert(`Application ${status} successfully!`)
+                    } catch (error) {
+                        console.error('Failed to update application:', error)
+                        alert('Failed to update application. Please try again.')
+                    }
+                    this.loading = false
+                }
+            }
+        }).mount('#app')
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
